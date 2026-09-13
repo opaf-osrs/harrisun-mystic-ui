@@ -60,7 +60,7 @@ public class MysticHudFrameOverlay extends Overlay
 	private static final int COMPASS_SPRITE = 169; // 51x51 compass rose, verified in cache
 
 	// no border art is bundled. the frame is drawn from the V2StoneBorders SIDE_PANEL set
-	// read through loadSprite, which checks the client's sprite override table before the
+	// read through sprite(), which checks the client's sprite override table before the
 	// cache: whatever pack the player is running supplies its own art there, so with
 	// Mystic active the frame IS Mystic's and matches the inventory panel exactly, and
 	// with no pack it falls back to the game own stone panel border. a read of live client
@@ -723,7 +723,7 @@ public class MysticHudFrameOverlay extends Overlay
 
 	private BufferedImage icon(int orbChild)
 	{
-		return icons.computeIfAbsent(iconSprite(orbChild), this::loadSprite);
+		return sprite(iconSprite(orbChild));
 	}
 
 	/**
@@ -742,6 +742,7 @@ public class MysticHudFrameOverlay extends Overlay
 	void clearArtCaches()
 	{
 		icons.clear();
+		spriteSources.clear();
 		cacheOnly.clear();
 		trims.clear();
 		rotations.clear();
@@ -753,17 +754,36 @@ public class MysticHudFrameOverlay extends Overlay
 		return config.originalFrameArt() ? cacheSprite(id) : sprite(id);
 	}
 
+	// the art each cached image was made from, per sprite id. the cache has to be keyed by the
+	// art OBJECT and not just the id: other plugins swap what sits under an id while the game
+	// runs. the core Poison plugin puts a green heart under the hitpoints icon while poisoned
+	// and removes it on cure, and an id-only cache kept drawing whichever heart it saw first
+	// until some unrelated setting happened to change, so the heart went green late and stayed
+	// green after the cure
+	private final Map<Integer, SpritePixels> spriteSources = new HashMap<>();
+
+	// override first so a resource pack's art (or anything swapped in at runtime) wins, the
+	// game's own art otherwise. one map lookup per call; converting only happens on a change
 	private BufferedImage sprite(int id)
 	{
-		return icons.computeIfAbsent(id, this::loadSprite);
-	}
-
-	// resource-pack override first so Mystic's art wins, cache art as fallback
-	private BufferedImage loadSprite(int id)
-	{
 		Map<Integer, SpritePixels> overrides = client.getSpriteOverrides();
-		SpritePixels sp = overrides != null ? overrides.get(id) : null;
-		return sp != null ? sp.toBufferedImage() : spriteManager.getSprite(id, 0);
+		SpritePixels current = overrides != null ? overrides.get(id) : null;
+		BufferedImage cached = icons.get(id);
+		if (cached != null && spriteSources.get(id) == current)
+		{
+			return cached;
+		}
+		BufferedImage fresh = current != null ? current.toBufferedImage() : spriteManager.getSprite(id, 0);
+		if (fresh == null)
+		{
+			// not loaded yet: store nothing, so the next frame tries again
+			icons.remove(id);
+			spriteSources.remove(id);
+			return null;
+		}
+		icons.put(id, fresh);
+		spriteSources.put(id, current);
+		return fresh;
 	}
 
 	private final Map<Integer, BufferedImage> cacheOnly = new HashMap<>();
