@@ -10,6 +10,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import javax.inject.Inject;
 import net.runelite.api.Client;
@@ -273,6 +274,10 @@ public class MysticHudFrameOverlay extends Overlay
 		// rather than smeared. the cap is clamped to the block too, so a big icon on a
 		// short row can never spill past the edges.
 		BufferedImage icon = icon(orbChild);
+		if (icon != null && config.orbIconSize() > 0)
+		{
+			icon = iconBox(icon);
+		}
 		String value = value(orbChild);
 		Font prev = g.getFont();
 		g.setFont(valueFont(config.orbFontSize()));
@@ -721,6 +726,32 @@ public class MysticHudFrameOverlay extends Overlay
 		}
 	}
 
+	// the game draws every orb icon at its own size, centred in a box this big. resource packs
+	// and the core Poison plugin ship their icons already padded out to it; the game's own
+	// sprites are not. sized as they come, a bare heart (15x14) was stretched to fill Icon size
+	// while a padded one (26x26, heart 16x14 inside) stayed small, so the heart ballooned
+	// whenever the Poison plugin removed a pack's heart on cure
+	private static final int ICON_BOX = 26;
+	private final Map<BufferedImage, BufferedImage> boxed = new IdentityHashMap<>();
+
+	/** The icon centred on a canvas at least ICON_BOX square, so all art scales the same. */
+	private BufferedImage iconBox(BufferedImage art)
+	{
+		if (art.getWidth() >= ICON_BOX && art.getHeight() >= ICON_BOX)
+		{
+			return art;
+		}
+		return boxed.computeIfAbsent(art, a ->
+		{
+			BufferedImage out = new BufferedImage(Math.max(ICON_BOX, a.getWidth()),
+				Math.max(ICON_BOX, a.getHeight()), BufferedImage.TYPE_INT_ARGB);
+			Graphics2D bg = out.createGraphics();
+			bg.drawImage(a, (out.getWidth() - a.getWidth()) / 2, (out.getHeight() - a.getHeight()) / 2, null);
+			bg.dispose();
+			return out;
+		});
+	}
+
 	private BufferedImage icon(int orbChild)
 	{
 		return sprite(iconSprite(orbChild));
@@ -743,6 +774,7 @@ public class MysticHudFrameOverlay extends Overlay
 	{
 		icons.clear();
 		spriteSources.clear();
+		boxed.clear();
 		cacheOnly.clear();
 		trims.clear();
 		rotations.clear();
@@ -783,6 +815,7 @@ public class MysticHudFrameOverlay extends Overlay
 		}
 		icons.put(id, fresh);
 		spriteSources.put(id, current);
+		boxed.clear();
 		return fresh;
 	}
 
