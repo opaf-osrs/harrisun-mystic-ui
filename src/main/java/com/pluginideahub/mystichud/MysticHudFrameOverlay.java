@@ -582,6 +582,9 @@ public class MysticHudFrameOverlay extends Overlay
 		double theta = -(v / turn) * Math.PI * 2;
 
 		java.awt.Shape oldClip = g.getClip();
+		// the graphics is shared with every overlay drawn after this one, so the hint set
+		// below has to be handed back or their images come out smoothed too
+		Object oldHint = g.getRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION);
 		g.setColor(EDGE);
 		g.fillOval(x - 3, y - 3, COMPASS_SIZE + 6, COMPASS_SIZE + 6);
 		g.setColor(HIGHLIGHT);
@@ -615,6 +618,10 @@ public class MysticHudFrameOverlay extends Overlay
 			g.drawLine((int) cx, (int) cy, (int) (2 * cx) - nx, (int) (2 * cy) - ny);
 		}
 		g.setClip(oldClip);
+		if (oldHint != null)
+		{
+			g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, oldHint);
+		}
 	}
 
 	// ---- data ----

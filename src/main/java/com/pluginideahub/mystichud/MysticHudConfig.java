@@ -274,6 +274,31 @@ public interface MysticHudConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "simulateSoulreaper",
+		name = "Simulate soulreaper axe",
+		description = "Draw the spec block as if the soulreaper axe were equipped. Developer mode only, it does nothing in a normal client.",
+		section = ORB_LAYOUT,
+		position = 15
+	)
+	default boolean simulateSoulreaper()
+	{
+		return false;
+	}
+
+	@Range(max = 5)
+	@ConfigItem(
+		keyName = "simulatedSoulStacks",
+		name = "Simulated soul stacks",
+		description = "Stack count shown while simulating the soulreaper axe.",
+		section = ORB_LAYOUT,
+		position = 16
+	)
+	default int simulatedSoulStacks()
+	{
+		return 3;
+	}
+
+	@ConfigItem(
 		keyName = "showExtraOrbs",
 		name = "XP orb",
 		description = "Show the xp counter orb in the strip beside the map",

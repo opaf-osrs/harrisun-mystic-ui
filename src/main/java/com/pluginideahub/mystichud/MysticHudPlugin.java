@@ -192,14 +192,20 @@ public class MysticHudPlugin extends Plugin
 		return healthState;
 	}
 
+	// dev-only stand-in for owning the axe. the game's own orb does not change, only ours
+	private boolean simulatingSoulreaper()
+	{
+		return developerMode && config.simulateSoulreaper();
+	}
+
 	boolean soulreaperEquipped()
 	{
-		return soulreaperEquipped;
+		return soulreaperEquipped || simulatingSoulreaper();
 	}
 
 	int soulStacks()
 	{
-		return soulStacks;
+		return simulatingSoulreaper() ? config.simulatedSoulStacks() : soulStacks;
 	}
 
 	/**
@@ -313,7 +319,7 @@ public class MysticHudPlugin extends Plugin
 	// bump when the meaning of the saved drag offsets changes
 	static final int LAYOUT_VERSION = 3;
 	// bumped EVERY build; painted on screen so a stale client is instantly obvious
-	static final String BUILD_TAG = "b105-hub";
+	static final String BUILD_TAG = "b106-hub";
 
 	@Inject
 	private Client client;
@@ -367,8 +373,9 @@ public class MysticHudPlugin extends Plugin
 		{
 			Rectangle b = mapBounds;
 			// the painted compass has no widget, so its click is handled here: face
-			// north and consume so the map underneath cannot turn it into a walk
-			if (b != null && config.showCompass()
+			// north and consume so the map underneath cannot turn it into a walk. not while
+			// the world map is open: it can sit over this spot and the click is its own
+			if (b != null && config.showCompass() && !worldMapOpen()
 				&& e.getButton() == MouseEvent.BUTTON1 && !e.isShiftDown())
 			{
 				Rectangle cb = compassBounds(mapRect());
@@ -634,7 +641,9 @@ public class MysticHudPlugin extends Plugin
 		// ANY group, not just ours: a resource pack being enabled, disabled or swapped
 		// changes the sprite override table, and the overlay's art is memoised by sprite
 		// id, so without this it keeps drawing the old pack until the plugin restarts
-		frameOverlay.clearArtCaches();
+		// on the client thread: config changes arrive on whichever thread made them (the
+		// settings panel's, usually) and the overlay is reading these maps as it draws
+		clientThread.invoke(frameOverlay::clearArtCaches);
 
 		// the drag itself writes posX/posY; rebuilding on those would reset the widget
 		// sprite cache on every mouse release and flicker the map
