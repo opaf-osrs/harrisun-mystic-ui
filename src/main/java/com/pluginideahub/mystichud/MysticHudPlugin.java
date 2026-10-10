@@ -319,7 +319,7 @@ public class MysticHudPlugin extends Plugin
 	// bump when the meaning of the saved drag offsets changes
 	static final int LAYOUT_VERSION = 3;
 	// bumped EVERY build; painted on screen so a stale client is instantly obvious
-	static final String BUILD_TAG = "b106-hub";
+	static final String BUILD_TAG = "b107-hub";
 
 	@Inject
 	private Client client;
@@ -375,7 +375,7 @@ public class MysticHudPlugin extends Plugin
 			// the painted compass has no widget, so its click is handled here: face
 			// north and consume so the map underneath cannot turn it into a walk. not while
 			// the world map is open: it can sit over this spot and the click is its own
-			if (b != null && config.showCompass() && !worldMapOpen()
+			if (b != null && config.showCompass() && !worldMapUp
 				&& e.getButton() == MouseEvent.BUTTON1 && !e.isShiftDown())
 			{
 				Rectangle cb = compassBounds(mapRect());
@@ -702,6 +702,10 @@ public class MysticHudPlugin extends Plugin
 		return client.getWidget(ORBS << 16 | child);
 	}
 
+	// worldMapOpen() for the mouse listener. widgets may only be read on the client thread,
+	// and the listener runs on AWT, so it reads this copy taken each frame instead
+	private volatile boolean worldMapUp;
+
 	/** True while the world map is up, which is when our block must stop eating clicks. */
 	private boolean worldMapOpen()
 	{
@@ -802,6 +806,7 @@ public class MysticHudPlugin extends Plugin
 
 	private void apply()
 	{
+		worldMapUp = worldMapOpen();
 		if (!active())
 		{
 			// stop the overlays painting and stop the compass/drag hit tests firing
