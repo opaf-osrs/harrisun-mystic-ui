@@ -10,11 +10,19 @@ import java.util.Map;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.Constants;
+import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.GameState;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.events.BeforeRender;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
@@ -139,6 +147,17 @@ public class MysticHudPlugin extends Plugin
 	private volatile boolean staminaActive;
 	private volatile boolean quickPrayersOn;
 	private volatile HealthState healthState = HealthState.NORMAL;
+	private volatile boolean soulreaperEquipped;
+	private volatile int soulStacks;
+	// where spec energy is in its regen cycle. the game has no var for this, so it is
+	// counted here the way core's Regeneration Meter does: reset on every jump up
+	private volatile int specRegenTicks;
+	private volatile int specRegenPeriod = SPEC_REGEN_TICKS;
+	private volatile long lastTickMillis;
+	private int lastSpecEnergy = -1;
+
+	static final int SPEC_REGEN_TICKS = 50;
+	static final int MAX_SOUL_STACKS = 5;
 
 	enum HealthState
 	{
@@ -173,6 +192,30 @@ public class MysticHudPlugin extends Plugin
 		return healthState;
 	}
 
+	boolean soulreaperEquipped()
+	{
+		return soulreaperEquipped;
+	}
+
+	int soulStacks()
+	{
+		return soulStacks;
+	}
+
+	/**
+	 * How far spec energy is toward its next 10%, 0..1, smoothed between ticks off the
+	 * wall clock so the strip slides rather than stepping. 0 at full energy.
+	 */
+	float specRegenProgress()
+	{
+		if (client.getVarpValue(VarPlayerID.SA_ENERGY) >= 1000)
+		{
+			return 0f;
+		}
+		float sinceTick = Math.min(1f, (System.currentTimeMillis() - lastTickMillis) / (float) Constants.GAME_TICK_LENGTH);
+		return Math.min(1f, (specRegenTicks + sinceTick) / specRegenPeriod);
+	}
+
 	/**
 	 * Re-reads every orb state. Cheap enough to do wholesale on any varbit or varp
 	 * change rather than working out which one moved, and that way a state can never be
@@ -184,6 +227,14 @@ public class MysticHudPlugin extends Plugin
 		running = client.getVarpValue(VarPlayerID.OPTION_RUN) != 0;
 		staminaActive = client.getVarbitValue(VarbitID.STAMINA_ACTIVE) != 0;
 		quickPrayersOn = client.getVarbitValue(VarbitID.QUICKPRAYER_ACTIVE) != 0;
+		soulStacks = client.getVarpValue(VarPlayerID.SOULREAPER_STACKS);
+
+		int energy = client.getVarpValue(VarPlayerID.SA_ENERGY);
+		if (energy > lastSpecEnergy)
+		{
+			specRegenTicks = 0;
+		}
+		lastSpecEnergy = energy;
 
 		// venom lives inside the poison varp as a magnitude, it has no var of its own.
 		// order and thresholds taken from RuneLite's own StatusBarsOverlay.
@@ -204,6 +255,23 @@ public class MysticHudPlugin extends Plugin
 		{
 			healthState = HealthState.NORMAL;
 		}
+	}
+
+	/**
+	 * The axe swaps the stock spec orb over to soul stacks, and Lightbearer halves the
+	 * regen period. Both are just what is worn, so read off the worn container.
+	 */
+	private void readEquipment()
+	{
+		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
+		if (worn == null)
+		{
+			return;
+		}
+		Item weapon = worn.getItem(EquipmentInventorySlot.WEAPON.getSlotIdx());
+		int id = weapon == null ? -1 : weapon.getId();
+		soulreaperEquipped = id == ItemID.SOULREAPER || id == ItemID.SOULREAPER_AXE_ORN;
+		specRegenPeriod = worn.contains(ItemID.LIGHTBEARER) ? SPEC_REGEN_TICKS / 2 : SPEC_REGEN_TICKS;
 	}
 
 	// poison varp counts up; at or past this it is venom instead
@@ -245,7 +313,7 @@ public class MysticHudPlugin extends Plugin
 	// bump when the meaning of the saved drag offsets changes
 	static final int LAYOUT_VERSION = 3;
 	// bumped EVERY build; painted on screen so a stale client is instantly obvious
-	static final String BUILD_TAG = "b104-hub";
+	static final String BUILD_TAG = "b105-hub";
 
 	@Inject
 	private Client client;
@@ -471,7 +539,17 @@ public class MysticHudPlugin extends Plugin
 		mouseManager.registerMouseListener(1, mouse);
 		overlayManager.add(frameOverlay);
 		settle = 60;
+		lastSpecEnergy = -1;
 		clientThread.invoke(this::apply);
+		// switched on while already logged in: there is no LOGGED_IN to read the orbs off
+		clientThread.invoke(() ->
+		{
+			if (client.getGameState() == GameState.LOGGED_IN)
+			{
+				readOrbStates();
+				readEquipment();
+			}
+		});
 	}
 
 	@Override
@@ -508,6 +586,30 @@ public class MysticHudPlugin extends Plugin
 			// as walking, unarmed and healthy until the player happens to toggle
 			// something. the vars are already set by the time we are logged in.
 			readOrbStates();
+			readEquipment();
+		}
+	}
+
+	@Subscribe
+	public void onItemContainerChanged(ItemContainerChanged e)
+	{
+		if (e.getContainerId() == InventoryID.WORN)
+		{
+			readEquipment();
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick e)
+	{
+		lastTickMillis = System.currentTimeMillis();
+		if (client.getVarpValue(VarPlayerID.SA_ENERGY) >= 1000)
+		{
+			specRegenTicks = 0;
+		}
+		else if (specRegenTicks < specRegenPeriod - 1)
+		{
+			specRegenTicks++;
 		}
 	}
 

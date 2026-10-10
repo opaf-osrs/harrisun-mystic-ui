@@ -56,6 +56,8 @@ public class MysticHudFrameOverlay extends Overlay
 	private static final Color PRAYER_C = new Color(0x4F, 0x43, 0x82);
 	private static final Color RUN_C = new Color(0xC0, 0xA5, 0x38);
 	private static final Color SPEC_C = new Color(0x3A, 0x9A, 0xB5);
+	private static final Color REGEN_C = new Color(0xD8, 0xF0, 0xF8);
+	private static final int REGEN_STRIP_H = 2;
 
 	private static final int COMPASS_SIZE = MysticHudPlugin.COMPASS_SIZE;
 	private static final int COMPASS_SPRITE = 169; // 51x51 compass rose, verified in cache
@@ -266,6 +268,19 @@ public class MysticHudFrameOverlay extends Overlay
 		// one uniform 1px border, the same EDGE colour as everything else
 		g.setColor(armed && config.specArmedBorder() ? ARMED_EDGE : EDGE);
 		g.drawRect(x, y, w - 1, h - 1);
+
+		// spec only jumps in 10% steps, so the fill alone sits still for 30s. this strip
+		// runs across the top through each step and resets when it lands. not with the
+		// soulreaper axe up: that block is showing stacks, not energy
+		if (orbChild == MysticHudPlugin.SPEC && !plugin.soulreaperEquipped())
+		{
+			int sw = Math.round((w - 2) * plugin.specRegenProgress());
+			if (sw > 0)
+			{
+				g.setColor(REGEN_C);
+				g.fillRect(x + 1, y + 1, sw, REGEN_STRIP_H);
+			}
+		}
 
 		// icon and value. the four stock icons are pixel art authored at different sizes
 		// and aspects (15x14, 20x20, 15x18, 16x16), so the size setting is a CAP rather
@@ -621,7 +636,9 @@ public class MysticHudFrameOverlay extends Overlay
 				f = client.getEnergy() / 10000f;
 				break;
 			default:
-				f = client.getVarpValue(VarPlayerID.SA_ENERGY) / 1000f;
+				f = plugin.soulreaperEquipped()
+					? plugin.soulStacks() / (float) MysticHudPlugin.MAX_SOUL_STACKS
+					: client.getVarpValue(VarPlayerID.SA_ENERGY) / 1000f;
 		}
 		return Math.max(0f, Math.min(1f, f));
 	}
@@ -637,7 +654,9 @@ public class MysticHudFrameOverlay extends Overlay
 			case MysticHudPlugin.RUN:
 				return Integer.toString(client.getEnergy() / 100);
 			default:
-				return Integer.toString(client.getVarpValue(VarPlayerID.SA_ENERGY) / 10);
+				return Integer.toString(plugin.soulreaperEquipped()
+					? plugin.soulStacks()
+					: client.getVarpValue(VarPlayerID.SA_ENERGY) / 10);
 		}
 	}
 
@@ -700,6 +719,7 @@ public class MysticHudFrameOverlay extends Overlay
 	private static final int ICON_RUN = SpriteID.OrbIcon._3;            // 1070 boot, running
 	private static final int ICON_RUN_STAMINA = SpriteID.OrbIcon._5;    // 1092 boot, stamina up
 	private static final int ICON_SPECIAL = SpriteID.OrbIcon._6;        // 1610 crossed swords
+	private static final int ICON_SOUL_STACKS = SpriteID.OrbIcon._16;   // 5755 soulreaper axe
 
 	/**
 	 * The icon for an orb in its CURRENT state. Run and prayer both have real active art
@@ -722,7 +742,7 @@ public class MysticHudFrameOverlay extends Overlay
 				}
 				return plugin.running() ? ICON_RUN : ICON_WALK;
 			default:
-				return ICON_SPECIAL;
+				return plugin.soulreaperEquipped() ? ICON_SOUL_STACKS : ICON_SPECIAL;
 		}
 	}
 
