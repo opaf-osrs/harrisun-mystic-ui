@@ -198,6 +198,12 @@ public class MysticHudPlugin extends Plugin
 		return developerMode && config.simulateSoulreaper();
 	}
 
+	// dev-only: every block shows a three digit value, to check the widest ones fit
+	boolean simulatingThreeDigits()
+	{
+		return developerMode && config.simulateThreeDigits();
+	}
+
 	boolean soulreaperEquipped()
 	{
 		return soulreaperEquipped || simulatingSoulreaper();
@@ -319,7 +325,7 @@ public class MysticHudPlugin extends Plugin
 	// bump when the meaning of the saved drag offsets changes
 	static final int LAYOUT_VERSION = 3;
 	// bumped EVERY build; painted on screen so a stale client is instantly obvious
-	static final String BUILD_TAG = "b110-hub";
+	static final String BUILD_TAG = "b115-hub";
 
 	@Inject
 	private Client client;
@@ -1127,15 +1133,13 @@ public class MysticHudPlugin extends Plugin
 		int hx = hostLoc.getX();
 		int hy = hostLoc.getY();
 
-		// nudge: aligns all of OUR chrome onto wherever the engine actually paints the
-		// map, tuned live by eye; the container itself stays put
-		// the container is now the MAP's rect, which may be inset inside the frame. the
-		// frame, the orb row and everything else we paint still span the full width, so
-		// visX is walked back out to the frame's left edge and the map's own rect is
-		// published separately for the things that must sit on the map itself
+		// the container is the MAP's rect, which may be inset inside the frame. the frame,
+		// the orb row and everything else we paint still span the full width, so visX is
+		// walked back out to the frame's left edge and the map's own rect is published
+		// separately for the things that must sit on the map itself
 		int inset = mapInset();
-		int visX = innerLoc.getX() - inset + config.frameNudgeX();
-		int visY = innerLoc.getY() + config.frameNudgeY();
+		int visX = innerLoc.getX() - inset;
+		int visY = innerLoc.getY();
 		mapW = INV_W;
 		int mapH = innerW.getHeight();
 		mapDrawRect = new Rectangle(visX + inset, visY, cfgMapW(), mapH);

@@ -6,35 +6,71 @@ import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
 
+// key names are kept wherever the meaning did not change, so players keep their values through
+// the 1.3 regroup. enum constants are stored by name, so those stay too and only toString moves.
 @ConfigGroup(MysticHudConfig.GROUP)
 public interface MysticHudConfig extends Config
 {
 	String GROUP = "mystichud";
 
 	@ConfigSection(
-		name = "Orb block layout",
-		description = "Size and placement of the icon and the value inside each orb block",
-		position = 5,
+		name = "Map position",
+		description = "Where the block sits when it is not attached to the inventory",
+		position = 10,
 		closedByDefault = true
 	)
-	String ORB_LAYOUT = "orbLayout";
+	String POSITION = "position";
+
+	@ConfigSection(
+		name = "Minimap",
+		description = "The map and what sits around it",
+		position = 20
+	)
+	String MINIMAP = "minimap";
+
+	@ConfigSection(
+		name = "Orb blocks",
+		description = "The four blocks under the map",
+		position = 30
+	)
+	String ORB_BLOCKS = "orbBlocks";
+
+	@ConfigSection(
+		name = "Developer",
+		description = "Testing tools. They only work in developer mode",
+		position = 40,
+		closedByDefault = true
+	)
+	String DEVELOPER = "developer";
+
+	// ---- top ----
 
 	@ConfigItem(
-		keyName = "squareMinimap",
-		name = "Square minimap",
-		description = "Remove the circular mask so the minimap renders as a rectangle",
+		keyName = "attachInventory",
+		name = "Attach to inventory",
+		description = "Join the block onto the top of the inventory. Resizable modern only",
 		position = 1
 	)
-	default boolean squareMinimap()
+	default boolean attachInventory()
 	{
-		return true;
+		return false;
 	}
 
+	@ConfigItem(
+		keyName = "hideWhenClosed",
+		name = "Hide when inventory closed",
+		description = "Hide the block while no side panel is open",
+		position = 2
+	)
+	default boolean hideWhenClosed()
+	{
+		return false;
+	}
 
 	@ConfigItem(
 		keyName = "orbOrder",
 		name = "Orb order",
-		description = "Left to right order of the orb row",
+		description = "Left to right order of the blocks",
 		position = 3
 	)
 	default OrbOrder orbOrder()
@@ -43,36 +79,102 @@ public interface MysticHudConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "squareMinimap",
+		name = "Square minimap",
+		description = "Draw the minimap as a rectangle instead of a circle",
+		position = 4
+	)
+	default boolean squareMinimap()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "drawBlocks",
 		name = "Square orb blocks",
-		description = "Draw a colour-filled block behind each orb instead of the stock capsule",
-		position = 4
+		description = "Draw the orbs as flat blocks instead of the round orbs",
+		position = 5
 	)
 	default boolean drawBlocks()
 	{
 		return true;
 	}
 
+	// ---- position ----
+
+	@Range(min = -400, max = 200)
+	@ConfigItem(
+		keyName = "posX",
+		name = "Position X",
+		description = "Move the block left or right. Shift+drag does the same",
+		section = POSITION,
+		position = 1
+	)
+	default int posX()
+	{
+		return 0;
+	}
+
+	@Range(min = -600, max = 600)
+	@ConfigItem(
+		keyName = "posY",
+		name = "Position Y",
+		description = "Move the block down from the top. It stops at the inventory",
+		section = POSITION,
+		position = 2
+	)
+	default int posY()
+	{
+		return 0;
+	}
+
+	// ---- minimap ----
+
 	// keyName deliberately NOT "nativeMapWidth": that key already has a stored false in
-	// the profile from trying the toggle, and a stored value beats a changed default, so
-	// the fix stayed switched off even after it became the default. a fresh key has
-	// nothing stored against it and actually takes the default.
+	// the profile from trying the toggle, and a stored value beats a changed default
 	@ConfigItem(
 		keyName = "trueMapWidth",
 		name = "True map width",
-		description = "Shrink the map to its native 152 and centre it in the frame. Not needed for click accuracy any more: that was the three mask sprites, see MASK_SPRITE. Leaves padding either side.",
-		position = 2
+		description = "Draw the map at the game's own 152px width, centred in the frame",
+		section = MINIMAP,
+		position = 1
 	)
 	default boolean nativeMapWidth()
 	{
 		return false;
 	}
 
+	@Range(min = 80, max = 152)
+	@ConfigItem(
+		keyName = "mapHeight",
+		name = "Map height",
+		description = "Tallest the map is drawn. It gets shorter when there is no room above the inventory",
+		section = MINIMAP,
+		position = 2
+	)
+	default int mapHeight()
+	{
+		return 152;
+	}
+
+	@ConfigItem(
+		keyName = "mapOutline",
+		name = "Map frame",
+		description = "Draw a frame around the map and blocks",
+		section = MINIMAP,
+		position = 3
+	)
+	default boolean mapOutline()
+	{
+		return true;
+	}
+
 	@ConfigItem(
 		keyName = "originalFrameArt",
 		name = "Original frame art",
-		description = "Draw the frame with the game's own steel border. Turn this off to use the border from your resource pack instead. Only the frame is affected; the compass and the orb icons follow your pack either way.",
-		position = 9
+		description = "Use the game's own frame art instead of your resource pack's",
+		section = MINIMAP,
+		position = 4
 	)
 	default boolean originalFrameArt()
 	{
@@ -80,35 +182,49 @@ public interface MysticHudConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "mapOutline",
-		name = "Map outline",
-		description = "Draw a UI frame around the rectangular minimap",
-		position = 10
+		keyName = "showCompass",
+		name = "Compass",
+		description = "Small compass in the map's top left corner. Click it to face north",
+		section = MINIMAP,
+		position = 5
 	)
-	default boolean mapOutline()
+	default boolean showCompass()
 	{
 		return true;
 	}
 
-	@Range(min = 80, max = 152)
 	@ConfigItem(
-		keyName = "mapHeight",
-		name = "Map height",
-		description = "Height of the minimap. The engine always draws 152 tall anchored to the bottom, so anything under 152 spills that much live map out above the frame instead of cropping.",
-		section = ORB_LAYOUT,
-		position = 0
+		keyName = "showWorldMap",
+		name = "World map orb",
+		description = "Show the world map orb beside the map. Ctrl+M works either way",
+		section = MINIMAP,
+		position = 6
 	)
-	default int mapHeight()
+	default boolean showWorldMap()
 	{
-		return 152;
+		return true;
 	}
+
+	@ConfigItem(
+		keyName = "showExtraOrbs",
+		name = "XP orb",
+		description = "Show the xp orb beside the map",
+		section = MINIMAP,
+		position = 7
+	)
+	default boolean showExtraOrbs()
+	{
+		return false;
+	}
+
+	// ---- orb blocks ----
 
 	@Range(min = 24, max = 120)
 	@ConfigItem(
 		keyName = "orbRowHeight",
 		name = "Row height",
-		description = "Height of the four orb blocks",
-		section = ORB_LAYOUT,
+		description = "Height of the blocks. It stops growing when it would reach the inventory",
+		section = ORB_BLOCKS,
 		position = 1
 	)
 	default int orbRowHeight()
@@ -116,121 +232,28 @@ public interface MysticHudConfig extends Config
 		return 40;
 	}
 
-	// literal, not a cap: whatever is set here is the size drawn. nothing clamps it to
-	// the block, so it will happily overflow or collide if that is what is asked for.
-	@Range(max = 64)
+	// a new key, not orbIconSize: that one's 0 meant "leave the art alone", and this is a
+	// real size, so old values would mean the wrong thing here
+	@Range(min = 8, max = 64)
 	@ConfigItem(
-		keyName = "orbIconSize",
+		keyName = "iconSize",
 		name = "Icon size",
-		description = "Exact size the icon is drawn at, in pixels. 0 leaves it at its native size, which is the only setting that keeps it pixel-perfect. Nothing clamps this, so it can overflow the block.",
-		section = ORB_LAYOUT,
+		description = "Icon size in pixels. It shrinks if the value would not fit beside it",
+		section = ORB_BLOCKS,
 		position = 2
 	)
-	default int orbIconSize()
+	default int iconSize()
 	{
-		return 0;
-	}
-
-	@Range(min = -32, max = 48)
-	@ConfigItem(
-		keyName = "orbIconPadX",
-		name = "Icon X",
-		description = "Icon distance from the block's left edge. Negative pushes it off the left.",
-		section = ORB_LAYOUT,
-		position = 4
-	)
-	default int orbIconPadX()
-	{
-		return 3;
-	}
-
-	@Range(min = -48, max = 48)
-	@ConfigItem(
-		keyName = "orbIconNudgeY",
-		name = "Icon Y",
-		description = "Shift the icon up or down from vertical centre",
-		section = ORB_LAYOUT,
-		position = 5
-	)
-	default int orbIconNudgeY()
-	{
-		return 0;
-	}
-
-	@ConfigItem(
-		keyName = "orbTextAlign",
-		name = "Value position",
-		description = "Where the number sits. Stacked puts it under the icon and spends the row's height on the icon. Over icon reserves it no space at all, which is the only way to fill the whole block with the icon.",
-		section = ORB_LAYOUT,
-		position = 6
-	)
-	default TextAlign orbTextAlign()
-	{
-		return TextAlign.AFTER_ICON;
-	}
-
-	@Range(min = -48, max = 48)
-	@ConfigItem(
-		keyName = "orbTextGap",
-		name = "Icon to value gap",
-		description = "Space between the icon and the number. Negative overlaps them.",
-		section = ORB_LAYOUT,
-		position = 7
-	)
-	default int orbTextGap()
-	{
-		return 3;
-	}
-
-	@Range(min = -48, max = 48)
-	@ConfigItem(
-		keyName = "orbTextNudgeX",
-		name = "Value X",
-		description = "Shift the number left or right from wherever the value position put it",
-		section = ORB_LAYOUT,
-		position = 8
-	)
-	default int orbTextNudgeX()
-	{
-		return 0;
-	}
-
-	// the four icons share a canvas size but not how much of it their art fills, so an
-	// identical gap in pixels does not read as an identical gap. this rides on top of
-	// Value X for the prayer orb alone.
-	@Range(min = -48, max = 48)
-	@ConfigItem(
-		keyName = "orbPrayerValueX",
-		name = "Prayer value X",
-		description = "Extra sideways shift for the prayer number only, on top of Value X. Its icon's art sits nearer the edge of its canvas than the others, so the same gap looks tighter.",
-		section = ORB_LAYOUT,
-		position = 9
-	)
-	default int orbPrayerValueX()
-	{
-		return 1;
-	}
-
-	@Range(min = -48, max = 48)
-	@ConfigItem(
-		keyName = "orbTextNudgeY",
-		name = "Value Y",
-		description = "Shift the number up or down from vertical centre",
-		section = ORB_LAYOUT,
-		position = 10
-	)
-	default int orbTextNudgeY()
-	{
-		return 0;
+		return 20;
 	}
 
 	@Range(min = 6, max = 40)
 	@ConfigItem(
 		keyName = "orbFontSize",
-		name = "Value font size",
-		description = "Size of the number. 16 is the font's native size and the crispest; other sizes are interpolated.",
-		section = ORB_LAYOUT,
-		position = 11
+		name = "Value size",
+		description = "Size of the number. 16 is the sharpest",
+		section = ORB_BLOCKS,
+		position = 3
 	)
 	default int orbFontSize()
 	{
@@ -238,11 +261,75 @@ public interface MysticHudConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "orbTextAlign",
+		name = "Value position",
+		description = "Where the number sits in the block",
+		section = ORB_BLOCKS,
+		position = 4
+	)
+	default TextAlign orbTextAlign()
+	{
+		return TextAlign.AFTER_ICON;
+	}
+
+	@Range(max = 24)
+	@ConfigItem(
+		keyName = "orbIconPadX",
+		name = "Edge padding",
+		description = "Space between the block's edge and the icon. Shrinks first when space is tight",
+		section = ORB_BLOCKS,
+		position = 5
+	)
+	default int orbIconPadX()
+	{
+		return 3;
+	}
+
+	@Range(max = 24)
+	@ConfigItem(
+		keyName = "orbTextGap",
+		name = "Gap",
+		description = "Space between the icon and the number. Shrinks first when space is tight",
+		section = ORB_BLOCKS,
+		position = 6
+	)
+	default int orbTextGap()
+	{
+		return 3;
+	}
+
+	@Range(min = -24, max = 24)
+	@ConfigItem(
+		keyName = "orbIconNudgeY",
+		name = "Icon Y",
+		description = "Move the icon up or down",
+		section = ORB_BLOCKS,
+		position = 7
+	)
+	default int orbIconNudgeY()
+	{
+		return 0;
+	}
+
+	@Range(min = -24, max = 24)
+	@ConfigItem(
+		keyName = "orbTextNudgeY",
+		name = "Value Y",
+		description = "Move the number up or down",
+		section = ORB_BLOCKS,
+		position = 8
+	)
+	default int orbTextNudgeY()
+	{
+		return 0;
+	}
+
+	@ConfigItem(
 		keyName = "specArmedFill",
-		name = "Spec armed fill",
-		description = "How the special attack block changes while a special is queued. Brighter keeps the orb's own blue; Game colour is the pale grey-blue stock RuneLite uses.",
-		section = ORB_LAYOUT,
-		position = 12
+		name = "Spec queued fill",
+		description = "How the spec block changes while a special attack is queued",
+		section = ORB_BLOCKS,
+		position = 9
 	)
 	default SpecArmedFill specArmedFill()
 	{
@@ -251,22 +338,24 @@ public interface MysticHudConfig extends Config
 
 	@ConfigItem(
 		keyName = "specArmedBorder",
-		name = "Spec armed border",
-		description = "Also light up the border of the special attack block while a special is queued. Combines with the fill setting.",
-		section = ORB_LAYOUT,
-		position = 13
+		name = "Spec queued border",
+		description = "Light up the spec block's border while a special attack is queued",
+		section = ORB_BLOCKS,
+		position = 10
 	)
 	default boolean specArmedBorder()
 	{
 		return false;
 	}
 
+	// ---- developer: every one of these is a no-op outside developer mode ----
+
 	@ConfigItem(
 		keyName = "orbDebug",
 		name = "Debug readout",
-		description = "Paint the build tag and the numbers the layout is working from over the minimap. Developer mode only, it does nothing in a normal client.",
-		section = ORB_LAYOUT,
-		position = 14
+		description = "Show the build tag and layout numbers over the map",
+		section = DEVELOPER,
+		position = 1
 	)
 	default boolean orbDebug()
 	{
@@ -276,9 +365,9 @@ public interface MysticHudConfig extends Config
 	@ConfigItem(
 		keyName = "simulateSoulreaper",
 		name = "Simulate soulreaper axe",
-		description = "Draw the spec block as if the soulreaper axe were equipped. Developer mode only, it does nothing in a normal client.",
-		section = ORB_LAYOUT,
-		position = 15
+		description = "Draw the spec block as if the soulreaper axe were equipped",
+		section = DEVELOPER,
+		position = 2
 	)
 	default boolean simulateSoulreaper()
 	{
@@ -289,9 +378,9 @@ public interface MysticHudConfig extends Config
 	@ConfigItem(
 		keyName = "simulatedSoulStacks",
 		name = "Simulated soul stacks",
-		description = "Stack count shown while simulating the soulreaper axe.",
-		section = ORB_LAYOUT,
-		position = 16
+		description = "Stack count shown while simulating the axe",
+		section = DEVELOPER,
+		position = 3
 	)
 	default int simulatedSoulStacks()
 	{
@@ -299,80 +388,13 @@ public interface MysticHudConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showExtraOrbs",
-		name = "XP orb",
-		description = "Show the xp counter orb in the strip beside the map",
-		position = 7
-	)
-	default boolean showExtraOrbs()
-	{
-		return false;
-	}
-
-	@Range(min = -40, max = 40)
-	@ConfigItem(
-		keyName = "frameNudgeX",
-		name = "Frame nudge X",
-		description = "Shift the frame and row sideways until they sit exactly on the drawn map",
-		position = 3
-	)
-	default int frameNudgeX()
-	{
-		return 0;
-	}
-
-	@Range(min = -40, max = 40)
-	@ConfigItem(
-		keyName = "frameNudgeY",
-		name = "Frame nudge Y",
-		description = "Shift the frame and row up or down until they sit exactly on the drawn map",
+		keyName = "simulateThreeDigits",
+		name = "Simulate 3-digit values",
+		description = "Show a three digit number in every block",
+		section = DEVELOPER,
 		position = 4
 	)
-	default int frameNudgeY()
-	{
-		return 0;
-	}
-
-	@ConfigItem(
-		keyName = "showCompass",
-		name = "Compass",
-		description = "Show a small round compass over the minimap's top left corner",
-		position = 12
-	)
-	default boolean showCompass()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "showWorldMap",
-		name = "World map orb",
-		description = "Show the world map orb in the strip beside the map, under the xp orb. Ctrl+M opens the world map either way.",
-		position = 11
-	)
-	default boolean showWorldMap()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "attachInventory",
-		name = "Attach to inventory",
-		description = "Glue the block flush onto the inventory panel so they read as one piece; snaps to the top right corner while the inventory is closed. Disables shift-drag. Resizable modern only, it is ignored in classic.",
-		position = 8
-	)
-	default boolean attachInventory()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "hideWhenClosed",
-		name = "Hide when inventory closed",
-		description = "Hide the minimap block entirely while no side panel is open",
-		position = 9
-	)
-	default boolean hideWhenClosed()
+	default boolean simulateThreeDigits()
 	{
 		return false;
 	}
@@ -388,50 +410,65 @@ public interface MysticHudConfig extends Config
 		return 0;
 	}
 
-	@Range(min = -400, max = 200)
-	@ConfigItem(
-		keyName = "posX",
-		name = "Position X",
-		description = "Move the block left or right. 0 lines it up with the inventory.",
-		position = 20
-	)
-	default int posX()
-	{
-		return 0;
-	}
-
-	@Range(min = -600, max = 600)
-	@ConfigItem(
-		keyName = "posY",
-		name = "Position Y",
-		description = "Move the block up or down. 0 sits it just above the inventory.",
-		position = 21
-	)
-	default int posY()
-	{
-		return 0;
-	}
-
 	enum OrbOrder
 	{
-		SPEC_PRAYER_RUN_HP,
-		HP_PRAYER_RUN_SPEC,
-		HP_PRAYER_SPEC_RUN
+		SPEC_PRAYER_RUN_HP("Spec, Prayer, Run, HP"),
+		HP_PRAYER_RUN_SPEC("HP, Prayer, Run, Spec"),
+		HP_PRAYER_SPEC_RUN("HP, Prayer, Spec, Run");
+
+		private final String label;
+
+		OrbOrder(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
 	}
 
 	enum SpecArmedFill
 	{
-		NONE,
-		BRIGHTER,
-		GAME_COLOUR
+		NONE("No change"),
+		BRIGHTER("Brighter"),
+		GAME_COLOUR("Game colour");
+
+		private final String label;
+
+		SpecArmedFill(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
 	}
 
 	enum TextAlign
 	{
-		AFTER_ICON,
-		RIGHT_EDGE,
-		CENTRED,
-		STACKED,
-		OVER_ICON
+		AFTER_ICON("Beside icon"),
+		RIGHT_EDGE("Right edge"),
+		CENTRED("Centred"),
+		STACKED("Under icon"),
+		OVER_ICON("On icon");
+
+		private final String label;
+
+		TextAlign(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
 	}
 }

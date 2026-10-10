@@ -10,7 +10,6 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import javax.inject.Inject;
 import net.runelite.api.Client;
@@ -210,18 +209,10 @@ public class MysticHudFrameOverlay extends Overlay
 		return null;
 	}
 
-	private static final int TEXT_EDGE_PAD = 3; // right inset when the value is right-aligned
-
-	/**
-	 * Per-orb tweak to the value's x, on top of the Value X setting. The four icons share
-	 * a canvas size but not how much of it their art actually fills, so an identical gap
-	 * in pixels does not read as an identical gap: the prayer star's ink runs closer to
-	 * its right edge than the others and its number looked tighter for it.
-	 */
-	private int valueNudgeX(int orbChild)
-	{
-		return orbChild == MysticHudPlugin.PRAYER ? config.orbPrayerValueX() : 0;
-	}
+	// the size Icon size describes: the game's biggest orb icon (prayer, 20x20)
+	private static final int ICON_REF = 20;
+	// smallest an icon is ever squeezed to
+	private static final int MIN_ICON = 8;
 
 	// deriving the font allocates, so it is cached rather than rebuilt four times a frame
 	private Font valueFont;
@@ -283,56 +274,77 @@ public class MysticHudFrameOverlay extends Overlay
 			}
 		}
 
-		// icon and value. the four stock icons are pixel art authored at different sizes
-		// and aspects (15x14, 20x20, 15x18, 16x16), so the size setting is a CAP rather
-		// than a target: an icon already inside it draws 1:1 and keeps every pixel, and
-		// only the oversized ones shrink, nearest-neighbour so they stay hard-edged
-		// rather than smeared. the cap is clamped to the block too, so a big icon on a
-		// short row can never spill past the edges.
+		// icon and value, fitted to the block. the player sets the sizes they WANT and when it
+		// does not all fit, things give way in a fixed order: the gap, then the edge padding,
+		// then the icon. the value's font is never touched, so a number is never cut off
+		// unless it is wider than the whole block on its own.
+		//
+		// icons are laid out by their VISIBLE art. packs ship them on a padded 26x26 canvas,
+		// and spacing the value off that padding is what left 100 spec reading 10
 		BufferedImage icon = icon(orbChild);
-		if (icon != null && config.orbIconSize() > 0)
+		if (icon != null)
 		{
-			icon = iconBox(icon);
+			icon = orElse(trimmed(icon), icon);
 		}
 		String value = value(orbChild);
 		Font prev = g.getFont();
 		g.setFont(valueFont(config.orbFontSize()));
 		FontMetrics fm = g.getFontMetrics();
 		int tw = fm.stringWidth(value);
+		int th = fm.getAscent();
 
-		int padX = config.orbIconPadX();
-		int gap = icon != null ? config.orbTextGap() : 0;
 		MysticHudConfig.TextAlign align = config.orbTextAlign();
 		boolean stacked = align == MysticHudConfig.TextAlign.STACKED;
 		boolean over = align == MysticHudConfig.TextAlign.OVER_ICON;
-		int th = fm.getAscent();
-		int iw = 0;
-		int ih = 0;
+		int pad = Math.max(0, config.orbIconPadX());
+		int gap = icon != null && !over ? Math.max(0, config.orbTextGap()) : 0;
+
+		// Icon size is the size of the BIGGEST icon, and every icon scales by the same
+		// factor, so at the default 20 the game's own art draws 1:1 and the four keep their
+		// sizes relative to each other instead of the small heart being blown up to match
+		int nw = icon != null ? icon.getWidth() : 0;
+		int nh = icon != null ? icon.getHeight() : 0;
+		double scale = config.iconSize() / (double) ICON_REF;
+		int iw = icon != null ? Math.max(1, (int) Math.round(nw * scale)) : 0;
+		int ih = icon != null ? Math.max(1, (int) Math.round(nh * scale)) : 0;
+
+		// the space along the axis the icon and value share, and how far over it they run
+		int room = stacked ? vh : w;
+		int extent = over ? Math.max(iw, ih) : stacked ? ih + th : iw + tw;
+		int excess = 2 * pad + gap + extent - room;
+		if (excess > 0)
+		{
+			int g1 = Math.min(excess, Math.max(0, gap - 1));
+			gap -= g1;
+			excess -= g1;
+		}
+		if (excess > 0)
+		{
+			int p1 = Math.min((excess + 1) / 2, Math.max(0, pad - 1));
+			pad -= p1;
+			excess -= 2 * p1;
+		}
 		if (icon != null)
 		{
-			int nw = icon.getWidth();
-			int nh = icon.getHeight();
-			// the size setting is LITERAL. nothing here clamps it to the block, to the
-			// row, or to the space the value wants: every one of those rails ended up
-			// silently overriding a number that had been set on purpose, which is worse
-			// than letting a bad number look bad. 0 means leave the art alone.
-			int size = config.orbIconSize();
-			if (size <= 0)
+			// what is left for the icon on the shared axis, and it never pokes out of the
+			// block on the other one either
+			int side = over ? Math.min(w, vh) - 2 * pad : 0;
+			int maxW = over ? side : stacked ? w - 2 : w - 2 * pad - gap - tw;
+			int maxH = over ? side : stacked ? vh - 2 * pad - gap - th : vh - 2;
+			double fit = Math.min(1.0, Math.min(maxW / (double) iw, maxH / (double) ih));
+			if (fit < 1.0)
 			{
-				iw = nw;
-				ih = nh;
+				// floor: the icon's longest side never drops under MIN_ICON
+				double floor = MIN_ICON / (double) Math.max(iw, ih);
+				fit = Math.max(fit, Math.min(1.0, floor));
+				iw = Math.max(1, (int) Math.round(iw * fit));
+				ih = Math.max(1, (int) Math.round(ih * fit));
 			}
-			else
-			{
-				double s = Math.min(size / (double) nw, size / (double) nh);
-				iw = Math.max(1, (int) Math.round(nw * s));
-				ih = Math.max(1, (int) Math.round(nh * s));
-			}
-			if (plugin.debugReadout())
-			{
-				debugGeom = "slot" + w + " row" + h + " cov" + cover + " vh" + vh;
-				debugIcon = "set" + size + " nat" + nw + "x" + nh + ">" + iw + "x" + ih;
-			}
+		}
+		if (plugin.debugReadout())
+		{
+			debugGeom = "slot" + w + " row" + h + " cov" + cover + " vh" + vh;
+			debugIcon = "icon" + iw + "x" + ih + " pad" + pad + " gap" + gap + " val" + tw;
 		}
 
 		int ix;
@@ -345,26 +357,23 @@ public class MysticHudFrameOverlay extends Overlay
 				tx = x + (w - tw) / 2;
 				break;
 			case CENTRED:
-				// gap is left out of the centring on purpose: it should push the value
-				// away from the icon, not slide the icon along with it
-				ix = x + (w - (iw + tw)) / 2;
+				ix = x + (w - (iw + gap + tw)) / 2;
 				tx = ix + iw + gap;
 				break;
 			case RIGHT_EDGE:
-				ix = x + padX;
-				tx = x + w - TEXT_EDGE_PAD - tw;
+				ix = x + pad;
+				tx = x + w - pad - tw;
 				break;
 			default:
-				ix = x + padX;
+				ix = x + pad;
 				tx = ix + iw + gap;
 				break;
 		}
-		tx += config.orbTextNudgeX() + valueNudgeX(orbChild);
 
 		// stacked centres the icon and value as a column; the rest centre each on the row.
 		// gap is left out of the centring here too, so widening it drops the value down
 		// the block and leaves the icon where it was
-		int top = y + (vh - (ih + th)) / 2;
+		int top = y + (vh - (ih + gap + th)) / 2;
 		if (icon != null)
 		{
 			int iy = (stacked && !over ? top : y + (vh - ih) / 2) + config.orbIconNudgeY();
@@ -653,6 +662,16 @@ public class MysticHudFrameOverlay extends Overlay
 
 	private String value(int orbChild)
 	{
+		if (plugin.simulatingThreeDigits())
+		{
+			// the values a player really sees past 99: full spec and run, boosted prayer and hp
+			switch (orbChild)
+			{
+				case MysticHudPlugin.HP: return "118";
+				case MysticHudPlugin.PRAYER: return "109";
+				default: return "100";
+			}
+		}
 		switch (orbChild)
 		{
 			case MysticHudPlugin.HP:
@@ -754,32 +773,6 @@ public class MysticHudFrameOverlay extends Overlay
 		}
 	}
 
-	// the game draws every orb icon at its own size, centred in a box this big. resource packs
-	// and the core Poison plugin ship their icons already padded out to it; the game's own
-	// sprites are not. sized as they come, a bare heart (15x14) was stretched to fill Icon size
-	// while a padded one (26x26, heart 16x14 inside) stayed small, so the heart ballooned
-	// whenever the Poison plugin removed a pack's heart on cure
-	private static final int ICON_BOX = 26;
-	private final Map<BufferedImage, BufferedImage> boxed = new IdentityHashMap<>();
-
-	/** The icon centred on a canvas at least ICON_BOX square, so all art scales the same. */
-	private BufferedImage iconBox(BufferedImage art)
-	{
-		if (art.getWidth() >= ICON_BOX && art.getHeight() >= ICON_BOX)
-		{
-			return art;
-		}
-		return boxed.computeIfAbsent(art, a ->
-		{
-			BufferedImage out = new BufferedImage(Math.max(ICON_BOX, a.getWidth()),
-				Math.max(ICON_BOX, a.getHeight()), BufferedImage.TYPE_INT_ARGB);
-			Graphics2D bg = out.createGraphics();
-			bg.drawImage(a, (out.getWidth() - a.getWidth()) / 2, (out.getHeight() - a.getHeight()) / 2, null);
-			bg.dispose();
-			return out;
-		});
-	}
-
 	private BufferedImage icon(int orbChild)
 	{
 		return sprite(iconSprite(orbChild));
@@ -802,7 +795,6 @@ public class MysticHudFrameOverlay extends Overlay
 	{
 		icons.clear();
 		spriteSources.clear();
-		boxed.clear();
 		cacheOnly.clear();
 		trims.clear();
 		rotations.clear();
@@ -843,7 +835,10 @@ public class MysticHudFrameOverlay extends Overlay
 		}
 		icons.put(id, fresh);
 		spriteSources.put(id, current);
-		boxed.clear();
+		// trims are keyed by image, and the image just replaced is never asked for again.
+		// other plugins swap art at runtime (Poison does on every poison and cure), so
+		// without this the map keeps every old one. the frame re-trims next frame, cheaply
+		trims.clear();
 		return fresh;
 	}
 
