@@ -319,7 +319,7 @@ public class MysticHudPlugin extends Plugin
 	// bump when the meaning of the saved drag offsets changes
 	static final int LAYOUT_VERSION = 3;
 	// bumped EVERY build; painted on screen so a stale client is instantly obvious
-	static final String BUILD_TAG = "b107-hub";
+	static final String BUILD_TAG = "b110-hub";
 
 	@Inject
 	private Client client;
@@ -362,6 +362,8 @@ public class MysticHudPlugin extends Plugin
 	private volatile Rectangle mapDrawRect;
 	private volatile int offX;
 	private volatile int offY;
+	// lowest offY the block can take before it meets the inventory, set each frame
+	private volatile int maxOffY = Integer.MAX_VALUE;
 	private boolean dragging;
 	private int lastLoggedOffY = Integer.MIN_VALUE;
 	private int grabX, grabY, dragBaseX, dragBaseY;
@@ -399,7 +401,8 @@ public class MysticHudPlugin extends Plugin
 				grabX = e.getX();
 				grabY = e.getY();
 				dragBaseX = offX;
-				dragBaseY = offY;
+				// from where the block actually is, so a stored offset past the limit is no dead zone
+				dragBaseY = Math.min(offY, maxOffY);
 				e.consume();
 			}
 			return e;
@@ -411,7 +414,7 @@ public class MysticHudPlugin extends Plugin
 			if (dragging)
 			{
 				offX = dragBaseX + e.getX() - grabX;
-				offY = dragBaseY + e.getY() - grabY;
+				offY = Math.min(dragBaseY + e.getY() - grabY, maxOffY);
 				log.debug("MHUD drag off=({},{})", offX, offY);
 				e.consume();
 			}
@@ -745,13 +748,26 @@ public class MysticHudPlugin extends Plugin
 		return (INV_W - cfgMapW()) / 2;
 	}
 
+	// the map height actually laid out this frame: the setting, or less when attached and
+	// there is not room above the inventory for it. set in apply() before anything reads it
+	private int fitMapH = 152;
+	// lowest the map gives up height to; walk clicks below this are untested
+	static final int MIN_FIT_MAP_H = 80;
+	// the Row height slider's own minimum, so a squeezed row is never shorter than one the player could pick
+	static final int MIN_ROW_H = 24;
+
+	int fitMapHeight()
+	{
+		return fitMapH;
+	}
+
 	private int cfgMapH()
 	{
 		// the engine ALWAYS draws 152 tall (native), anchored to the container bottom, so
 		// below 152 the difference spills out as live map above the frame rather than
 		// cropping. exposed anyway: the spill is a look to judge, not a crash, and 152
 		// is still the only height where draw, container and frame coincide exactly.
-		return config.mapHeight();
+		return fitMapH;
 	}
 
 	int[] orbChildren()
@@ -864,12 +880,13 @@ public class MysticHudPlugin extends Plugin
 		// THE MAP IS ITS NATIVE SIZE, ALWAYS. compact-orbs, the shipping plugin that does
 		// this exact job, never resizes the minimap draw widget, only its containers.
 		// every draw glitch we had came from fighting that.
+		fitMapH = config.mapHeight();
 		rowH = config.orbRowHeight();
 		int blockH = MAP_TOP + cfgMapH() + ROW_GAP + rowH;
 		int avail = parent.getHeight();
 		if (blockH > avail)
 		{
-			rowH = Math.max(24, rowH - (blockH - avail));
+			rowH = Math.max(MIN_ROW_H, rowH - (blockH - avail));
 			blockH = MAP_TOP + cfgMapH() + ROW_GAP + rowH;
 		}
 		if (blockH > avail)
@@ -883,6 +900,37 @@ public class MysticHudPlugin extends Plugin
 		// shift from there in every mode.
 		boolean attached = attachInventory();
 		int anchorTop = invOpen ? inv.getRelativeY() : parent.getHeight() - 2 * 36;
+		// attach ignores horizontal offset too, or a leftover free-mode drag shifts the
+		// glued block off the inventory's edges
+		int dx = attached ? 0 : Math.max(-(parent.getWidth() - 211), Math.min(200, offX));
+
+		// HARD LIMIT, both modes: the block never goes past the inventory's top edge. attached
+		// it glues 2px into the panel's own border (that is the bridged seam); free it stops
+		// at the edge. free mode only has an inventory to hit while the block is over its
+		// column, so a block dragged off to the side is left alone. modern only: attach is
+		// modern only, and classic's inventory sits in a different box
+		boolean overInv = client.getTopLevelInterfaceId() == TOPLEVEL_MODERN
+			&& (attached ? invOpen : Math.abs(dx) < INV_W);
+		int limit = attached ? anchorTop + 2 : anchorTop;
+		if (overInv)
+		{
+			// no room for it all: the map gives up height first, then once the map is at its
+			// floor the row stops growing. the shrink only happens with the block already
+			// pinned to the top of the screen, so the map the engine still draws above the
+			// frame (always 152 tall, bottom anchored) goes off the top of the window. only a
+			// window too short for the floor map and the smallest row can still overlap, as
+			// there is nothing left to give up
+			int space = limit - MAP_TOP - ROW_GAP;
+			if (space - rowH < cfgMapH())
+			{
+				fitMapH = Math.max(MIN_FIT_MAP_H, space - rowH);
+				rowH = Math.max(MIN_ROW_H, Math.min(rowH, space - fitMapH));
+				blockH = MAP_TOP + cfgMapH() + ROW_GAP + rowH;
+			}
+		}
+		// how far down a free-mode drag may go before the block meets the inventory
+		maxOffY = overInv && !attached ? limit - blockH : Integer.MAX_VALUE;
+
 		int bottom;
 		if (attached)
 		{
@@ -891,12 +939,10 @@ public class MysticHudPlugin extends Plugin
 		}
 		else
 		{
-			// free mode: default parks the block at the TOP; drag/sliders move it down
-			bottom = blockH + offY;
+			// free mode: default parks the block at the TOP; drag/sliders move it down,
+			// but never into the inventory
+			bottom = blockH + Math.min(offY, maxOffY);
 		}
-		// attach ignores horizontal offset too, or a leftover free-mode drag shifts the
-		// glued block off the inventory's edges
-		int dx = attached ? 0 : Math.max(-(parent.getWidth() - 211), Math.min(200, offX));
 		int targetY = Math.max(0, Math.min(avail - blockH, bottom - blockH));
 		if (offY != lastLoggedOffY)
 		{

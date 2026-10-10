@@ -187,6 +187,7 @@ public class MysticHudFrameOverlay extends Overlay
 			// than guessed at. align first: it is the setting that caps the icon.
 			String[] lines = {
 				config.orbTextAlign().name(),
+				"map " + plugin.fitMapHeight() + "/" + config.mapHeight() + " row " + plugin.rowH() + "/" + config.orbRowHeight(),
 				debugGeom,
 				debugIcon,
 				(plugin.running() ? "RUN" : "walk")

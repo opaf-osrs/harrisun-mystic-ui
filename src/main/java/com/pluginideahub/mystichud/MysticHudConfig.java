@@ -90,7 +90,7 @@ public interface MysticHudConfig extends Config
 		return true;
 	}
 
-	@Range(min = 132, max = 152)
+	@Range(min = 80, max = 152)
 	@ConfigItem(
 		keyName = "mapHeight",
 		name = "Map height",
